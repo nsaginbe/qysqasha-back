@@ -13,9 +13,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -34,29 +36,29 @@ public class FileProcessorService {
      * Обрабатывает загруженный файл
      */
     public FileUploadResponse processFile(MultipartFile file) throws IOException {
-        // Создаем директорию для загрузок, если она не существует
-        File directory = new File(uploadDir);
-        if (!directory.exists()) {
-            directory.mkdirs();
+        Path uploadPath = Paths.get(uploadDir);
+        if (Files.notExists(uploadPath)) {
+            Files.createDirectories(uploadPath);
         }
 
-        // Генерируем уникальный ID для файла
-        String fileId = UUID.randomUUID().toString();
-
-        // Сохраняем файл
         String originalFilename = file.getOriginalFilename();
-        String fileExtension = getFileExtension(originalFilename);
-        String filePath = uploadDir + File.separator + fileId + "." + fileExtension;
+        String ext = getFileExtension(originalFilename);
+        String fileId = UUID.randomUUID().toString();
+        String storedFilename = fileId + "." + ext;
 
-        File dest = new File(filePath);
-        file.transferTo(dest);
+        Path filePath = uploadPath.resolve(storedFilename);
+        try (InputStream in = file.getInputStream()) {
+            Files.copy(in, filePath, StandardCopyOption.REPLACE_EXISTING);
+        }
 
-        // Сохраняем связь между ID и путем к файлу
-        fileIdToPathMap.put(fileId, filePath);
+        fileIdToPathMap.put(fileId, filePath.toString());
         fileIdToContentTypeMap.put(fileId, file.getContentType());
 
-        // Извлекаем текст из файла
-        String extractedText = extractText(file, filePath, fileExtension);
+        String extractedText = extractText(
+                file,
+                filePath.toString(),
+                ext
+        );
 
         return FileUploadResponse.builder()
                 .fileId(fileId)
